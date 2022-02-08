@@ -1,0 +1,99 @@
+' Name        : Pulse_plating_current_mirror_28Nov2021.pbp
+' Programmer  : Louis-Philippe Carignan
+' Date        : 28 November 2021
+' Version     : 1
+' Compiler    : PICBASIC PRO Compiler 2.6
+' Assembler   : PM or MPASM
+' Target PIC  : 16F887 or similar
+' Hardware    : Non specific
+' Oscillator  : external 4 MHz
+' Keywords    : BLINK LED
+' Description : The following program runs a pulse plating electrodeposition.
+'The analog value read on port A0 controls the plating time on and the analog value on
+'port A1 controls the time off. The circuit is a Wilson current mirror using IRF721 MOSFETS.
+'A IRF721 MOSFET at the output controls if the current can flow or not. 
+'
+'Port A2 is set to digital output to be able to monitor the output voltage, using
+'an oscilloscope for instance. The digital port B3 goes high and low according to the
+'analog values on ports A0 and A1. When the port B3 goes high, it turns on the 
+'MOSFET and when port B3 goes low, it turns off the MOSFET.  
+     
+ define OSC 4
+ DEFINE LCD_DREG PORTD
+ DEFINE LCD_DBIT 0
+ DEFINE LCD_RSREG PORTD
+ DEFINE LCD_RSBIT 5
+ DEFINE LCD_EREG PORTD
+ DEFINE LCD_EBIT 4
+ DEFINE LCD_BITS 4
+ DEFINE LCD_LINES 2
+ DEFINE LCD_COMMANDUS 2000
+ DEFINE LCD_DATAUS 150
+ Define ADC_BITS     10 ' Set number of bits in result
+Define ADC_SAMPLEUS 50 ' Set sampling time in uS
+
+include "modedefs.bas"
+
+ADCON0 = %11000001     ' Set ADC_CLOCK to RC (DEFINE ACD_CLOCK inoperative on the 16F88x)
+ADCON1 = %10000000     ' Right-Justify result in ADRESH:ADRESL registers
+ANSEL = %11111011      ' Set AN2 to digital, AN0-1-3-4-5-6-7    to analog
+ANSELH = %00000000     ' Set AN8 and higher channels to digital operation
+TRISA = %11111011      ' Set PORTA to all input except pin 2
+trisb = %00000000   ' set all ports B to output
+trisc = %00000000   ' set all ports C to output except pin 3
+PORTC = %00000000   ' set all portc C to low except pin 3
+PORTB = %00000000   ' set all ports B to low
+
+
+
+volt0 var word  'voltage on analog pin 0
+volt1 var word  'voltage on analog pin 1
+v0 var word     'convert adc to time on of pin 0
+v1 var word     'convert adc to time off of pin 1
+   
+
+MOS2monitor var PORTA.2     ' Alias PORTA.2 to monitor the voltage 2
+LEDB0 Var PORTB.0    ' Alias PORTB.0 to LED 1
+LEDB2 Var PORTB.2    ' Alias PORTB.2 to LED 2
+MOS2 Var PORTB.3    ' Alias PORTB.3 to Mosfet 2
+
+
+low MOS2
+low MOS2monitor
+   
+   
+' =========================================================================   
+mainloop:
+               
+ LOW LEDB0            'Put LEDB0 and others to low
+ high LEDB2           'Put LEDB1 to high
+
+ adcin 0, volt0         ' Read channel 0  
+ adcin 1, volt1         ' Read channel 1 
+ 
+ ' convert analog value on channel 0 to time on during electroplating
+ v0 = volt0/5
+ ' convert analog value on channel 1 to time off during electroplating
+ v1 = volt1/2                    
+
+ 'Start positive pulse
+ high LEDB0
+ low LEDB2
+ high MOS2
+ high MOS2monitor
+ pause v0
+ 'start pause
+ low LEDB0
+ high LEDB2
+ low MOS2
+ low MOS2monitor
+ pause v1
+
+
+
+pause 1
+              
+                
+goto mainloop
+   
+End
