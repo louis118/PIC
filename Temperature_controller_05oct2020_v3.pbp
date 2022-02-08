@@ -1,0 +1,203 @@
+' Name        : Temperature_controller_05oct2020_v3.pbp
+' Programmer  : Louis-Philippe Carignan
+' Date        : 05 October 2020
+' Version     : 3
+' Compiler    : PICBASIC PRO Compiler 2.6
+' Assembler   : PM or MPASM
+' Target PIC  : 16F887 or similar
+' Hardware    : Non specific
+' Oscillator  : external 4 MHz
+' Keywords    : temperature controller
+' Description : The following program is used to control the temperature of a 
+' hot plate. Heating cartidges are connected to a hot plate, and connected to
+' 120 V wall inlet. A solid-state relay switches the power on and off on the
+' heating elements, depending on the temperature of the hot plate. It is not completely
+' a PID micro-controller just yet. If the actual temperature is less then the set point,
+' we heat the cartridge with a certain duty cycle. If the actual temparature is
+' greater than the set point, we stop heating the cartridge. 
+
+' A knob controls the duty cycle and the temperature set point. 
+' The analog port A0 measures the temperature of the hotplate. Here, the temperature
+' is remotely measured using an infrared sensor ZTP-115M. The sensor returns a 
+' voltage proportional to the temperature. 
+' The analog port A1 measures the duty cycle.
+' The analog port A2 measures the set point temperature of the hotplate.
+
+     
+' define external quartz oscillator frequency at 4 MHz 
+ define OSC 4
+' settings of the LCD screen
+ DEFINE LCD_DREG PORTD
+ DEFINE LCD_DBIT 0
+ DEFINE LCD_RSREG PORTD
+ DEFINE LCD_RSBIT 5
+ DEFINE LCD_EREG PORTD
+ DEFINE LCD_EBIT 4
+ DEFINE LCD_BITS 4
+ DEFINE LCD_LINES 2
+ DEFINE LCD_COMMANDUS 2000
+ DEFINE LCD_DATAUS 150
+ Define ADC_BITS     10 ' Set number of bits in result
+Define ADC_SAMPLEUS 50 ' Set sampling time in uS
+
+include "modedefs.bas"
+
+ADCON0 = %11000001     ' Set ADC_CLOCK to RC (DEFINE ACD_CLOCK inoperative on the 16F88x)
+ADCON1 = %10000000     ' Right-Justify result in ADRESH:ADRESL registers
+ANSEL = %00000111      ' Set AN0-AN7 to digital with the exeption of AN0, AN1 and AN2
+ANSELH = %00000000     ' Set AN8 and higher channels to digital operation
+TRISA = %11111111      ' Set PORTA to all input 
+trisb = %00000000   ' set all ports B to output
+trisc = %00000000   ' set all ports C to output
+
+voltmeas var word    'measured voltage from hotplate
+vmeas var word       '
+voltset var word     'measured set point voltage
+vset var word
+voltamb var word
+vamb var word
+voltduty var word    'measured voltage duty cycle
+vduty var word
+toff var word
+dutycycle var word
+'a0 var word
+'a1 var word
+'a2 var word
+'a3 var word
+'v2 var word 
+'v3 var word 
+'test_serial var word 
+
+LEDB Var PORTB.0 ' Alias PORTB.0 to LED
+HEATERB1 var PORTB.1    ' alias PORTB.1 for heater
+LEDB2 var PORTB.2       'Alias PORTB.2 for idle state
+LEDB3 var PORTB.3
+LEDB4 var PORTB.4
+LEDB5 var PORTB.5
+LEDB6 var PORTB.6
+LEDB7 var PORTB.7
+
+LEDC Var PORTC.0 ' Alias PORTC.0 to LED
+LEDC1 var PORTC.1
+LEDC2 var PORTC.2
+LEDC3 var PORTC.3
+LEDC4 var PORTC.4
+LEDC5 var PORTC.5
+LEDC6 var PORTC.6
+LEDC7 var PORTC.7
+                                                                                   
+'a0 = 251.15
+'a1 = 50.5
+'a2 = -7
+'a3 = 0.5  
+
+toff = 1000  
+
+'Lcdout $FE, 2 
+'lcdout $FE, 1, "Temperature:"
+
+'-------------------------------------------------------------------
+      
+mainloop:
+    
+LOW LEDB       ' turn heater LED off
+low HEATERB1      ' turn heater off
+high LEDB2     ' turn idle LED on
+LOW LEDB3
+LOW LEDB4
+LOW LEDB5
+LOW LEDB6
+LOW LEDB7
+low LEDC      
+LOW LEDC1      
+LOW LEDC2
+LOW LEDC3
+LOW LEDC4
+LOW LEDC5
+LOW LEDC6
+LOW LEDC7
+    
+ADCin 0, voltmeas                       ' read the analog input A0, the measured temperature
+adcin 1, voltduty                        ' read the analog input A1, the voltage for the duty cycle of the transistor
+adcin 2, voltset                        ' read the analog input A2, the setpoint temperature, or reference temperature for potentiometer
+   
+'vmeas = 165.4286 + 0.1035 * (voltmeas * 1000) * (5/1024) -0.00001125 * (voltmeas * 1000) * (5/1024) * (voltmeas * 1000) * (5/1024)    ' the read voltage volt is multiplied by 5/1024 for the resolution, since we have 5 volts max on the
+                                    ' channel 0, and 1024 binary values  
+'vmeas = 217 + 535 * voltmeas /2048' * (5/1024)/10000    ' the read voltage volt is multiplied by 5/1024 for the resolution, since we have 5 volts max on the
+                                    ' channel 0, and 1024 binary values  
+vmeas = (voltmeas-5)*5
+'vset = a0 + a1 * (voltset * 1000) * (5/1024) + a2 * (voltset * 1000) * (5/1024)* (voltset * 1000) * (5/1024)
+'vset = 217 + 535 * voltset /2048
+vset = (voltset-5)*5
+vduty = voltduty * 10        ' Convert analog value of potentiometer to milliseconds, from 0 to 10 seconds roughtly
+
+dutycycle = vduty/(vduty + toff )*100
+  
+'lcdout $FE,$01                          ' clear display
+'lcdout $FE,$80,"Tm:"          ' move cursour to beginning of first line
+'lcdout $FE,$80 + 4, #vmeas                    ' display variable vmeas, the measured temperature
+'lcdout $FE,$80 + 8, "Heat. off"               ' display heater off
+'lcdout $FE, $C0, "Ts:"              ' go to beginning of second line and display text
+'lcdout $FE,$C0 + 4, #vset           ' display temperature setpoint
+'lcdout $FE, $C0, "Duty:"
+'lcdout $FE, $C) + 6, #dutycycle         'display the duty cycle : ton/(ton + toff)
+'lcdout $FE, $C0, "Heater: off"          ' go to beginning of second line and display text 
+'pause 10
+
+if voltmeas < voltset then
+    
+    high LEDB           ' turn heater LED on
+    high HEATERB1          ' turn heater on
+    low LEDB2            ' turn idle LED off
+    lcdout $FE,$01                          ' clear display
+    lcdout $FE,$80,"V:"          ' move cursour to beginning of first line
+    lcdout $FE,$80 + 2, #vmeas                    ' display variable vmeas, the measured temperature
+    lcdout $FE,$80 + 7, "Heat. on"               ' display heater off
+    'lcdout $FE, $C0, "Ts:"              ' go to beginning of second line and display text
+    'lcdout $FE,$C0 + 4, #vset           ' display temperature setpoint
+    lcdout $FE, $C0, "Ton:"
+    lcdout $FE, $C0 + 5, #vduty         'display the time on for heating
+    lcdout $FE, $C0 + 9, "Vs:"              ' go to beginning of second line and display text
+    lcdout $FE,$C0 + 12, #vset           ' display temperature setpoint    
+    pause vduty
+    
+    low LEDB           ' turn heater LED on
+    low HEATERB1          ' turn heater off
+    high LEDB2            ' turn idle LED on
+    lcdout $FE,$01                          ' clear display
+    lcdout $FE,$80,"V:"          ' move cursour to beginning of first line
+    lcdout $FE,$80 + 2, #vmeas                    ' display variable vmeas, the measured temperature
+    lcdout $FE,$80 + 7, "Heat. off"               ' display heater off
+    'lcdout $FE, $C0, "Ts:"              ' go to beginning of second line and display text
+    'lcdout $FE,$C0 + 4, #vset           ' display temperature setpoint
+    lcdout $FE, $C0, "Ton:"
+    lcdout $FE, $C0 + 5, #vduty         'display the time on for heating
+    lcdout $FE, $C0 + 9, "Vs:"              ' go to beginning of second line and display text
+    lcdout $FE,$C0 + 12, #vset           ' display temperature setpoint   
+    pause toff
+        
+else
+    low LEDB            ' turn heater LED off
+    low HEATERB1           ' turn heater off
+    high LEDB2            ' turn idle LED on
+    lcdout $FE,$01                          ' clear display
+    lcdout $FE,$80,"V:"          ' move cursour to beginning of first line
+    lcdout $FE,$80 + 2, #vmeas                    ' display variable vmeas, the measured temperature
+    lcdout $FE,$80 + 7, "Heat. off"               ' display heater off
+    'lcdout $FE, $C0, "Ts:"              ' go to beginning of second line and display text
+    'lcdout $FE,$C0 + 4, #vset           ' display temperature setpoint
+    lcdout $FE, $C0, "Ton:"
+    lcdout $FE, $C0 + 5, #vduty         'display the time on for heating
+    lcdout $FE, $C0 + 9, "Vs:"              ' go to beginning of second line and display text
+    lcdout $FE,$C0 + 12, #vset           ' display temperature setpoint   
+    pause toff
+
+endif
+
+
+
+              
+                
+    goto mainloop
+   
+End
